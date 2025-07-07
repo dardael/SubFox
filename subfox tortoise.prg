@@ -1,34 +1,9 @@
-*-- SubFox Tortoise Installer --*
+*-- SubFox Tortoise Tools - Simplified for Encode/Decode Only --*
 *-- (c) 2008 Holden Data Systems
 
-*--		Examines the active project and then installs Tortoise-hook-scripts
-*--		to translate subfox-encoded files regarding this project.
+*--		Provides encode/decode functionality for SubFox files
 
 #include SubFox.h
-#include WinRegProcs.h
-
-#define COL_TYPE	1
-#define COL_PATH	2
-#define COL_CMD		3
-#define COL_WAIT	4
-#define COL_SHOW	5
-#define COL_COUNT	5
-
-#define HOOK_BEFORE_COMMIT	"start_commit_hook"
-#define HOOK_BEFORE_UPDATE	"start_update_hook"
-#define HOOK_AFTER_UPDATE	"post_update_hook"
-
-#define WAIT_YES	"true"
-#define WAIT_NO		"false"
-#define SHOW_YES	"show"
-#define SHOW_NO		"hide"
-
-*-- quick test --*
-LOCAL o
-* o = NEWOBJECT( "SubFoxTortoiseTools", "SubFox Tortoise.prg" )
-o = CREATEOBJECT( "SubFoxTortoiseTools" )
-o.InstallHooks()
-
 
 *******************************************************************************
 DEFINE CLASS SubFoxTortoiseTools AS session && OLEPUBLIC
@@ -321,106 +296,5 @@ FUNCTION DiscoverConflicts() AS Boolean
 		ENDIF
 	ENDFOR
 ENDFUNC && DiscoverConflicts
-*******************************************************************************
-FUNCTION InstallHooks(sFName AS String) AS Boolean
-	LOCAL i,s,o, nCnt, aHooks[1], lAnyChg, cSubfoxTortoiseDir, sAppFName
-	IF VARTYPE( sFName ) == 'O'
-		o = sFName && it's really an object... is a PROJECT object?
-		sFName = ""
-		IF !ISNULL( o ) AND PEMSTATUS( o, "Name", 5 ) AND FILE( o.Name )
-			this.s_PjxName = LOWER( o.Name )
-		ENDIF
-	ELSE
-		IF !EMPTY( sFName ) AND FILE( sFName )
-			this.s_PjxName = LOWER( sFName )
-		ENDIF
-	ENDIF
-	o = NEWOBJECT( "SubFoxProject", "SubFox Project Class.prg" )
-	IF !o.Open( this.s_PjxName )
-		RETURN .F.
-	ENDIF
-	this.s_PjxName = o.s_PjxName
-	this.s_RootPath = o.s_RootPath
-	o = NULL && discard object
-	*-- extract list of folders with at least one encoded file
-	SELECT s_Path FROM cFile ;
-		GROUP BY 1 ORDER BY 1 ;
-		WHERE l_Versioned AND l_Encoded ;
-		INTO CURSOR cPath
-	USE IN cFile
-	IF _TALLY == 0 AND !this.l_PurgeExtinct && no hooks need to be installed or un-installed
-		USE IN cPath
-		RETURN
-	ENDIF
-	*-- get the "current" list of Tortoise hooks
-	SET PROCEDURE TO WinRegProcs ADDITIVE
-	s = ReadRegistry( HKEY_CURRENT_USER, "Software\TortoiseSVN", "hooks", "" )
-	IF EMPTY( s )
-		nCnt = 0
-	ELSE
-		i = ALINES( aHooks, s, 0, LF )
-		nCnt = ROUND( i / COL_COUNT, 0 )
-		DIMENSION aHooks[nCnt,COL_COUNT] && restructure as 4 columns
-	ENDIF
-	CREATE CURSOR cHook (s_Type C(20), s_Path C(MAX_VFP_FLD_LEN), s_Cmd C(MAX_VFP_FLD_LEN), ;
-						 l_Wait L, l_Show L)
-	FOR i = 1 TO nCnt
-		INSERT INTO cHook  (s_Type, s_Path, s_Cmd, l_Wait, l_Show) ;
-					VALUES (aHooks[i,COL_TYPE], aHooks[i,COL_PATH], aHooks[i,COL_CMD], ;
-							aHooks[i,COL_WAIT] == WAIT_YES, aHooks[i,COL_SHOW] == SHOW_YES)
-
-	ENDFOR
-	lAnyChg = .F.
-	*Run Subfox from VFP directory to keep system clean
-	*** MDH 11/16/09 && cSubfoxTortoiseDir = AddBs(Home(1))
-	sAppFName = LOWER( SYS( 16, PROGRAM(-1)-1 ) )
-	SELECT cPath
-	SCAN ALL
-		SELECT cHook
-		LOCATE FOR RTRIM( s_Type ) == HOOK_BEFORE_COMMIT AND LOWER( s_Path ) == cPath.s_Path
-		IF !FOUND()
-			lAnyChg = .T.
-			INSERT INTO cHook  (s_Type, s_Path, s_Cmd, l_Wait, l_Show) ;
-						VALUES (HOOK_BEFORE_COMMIT, cPath.s_Path, sAppFName + " encode", .T., .F.)
-		ENDIF
-		LOCATE FOR RTRIM( s_Type ) == HOOK_BEFORE_UPDATE AND LOWER( s_Path ) == cPath.s_Path
-		IF !FOUND()
-			lAnyChg = .T.
-			INSERT INTO cHook  (s_Type, s_Path, s_Cmd, l_Wait, l_Show) ;
-						VALUES (HOOK_BEFORE_UPDATE, cPath.s_Path, sAppFName + " encode", .T., .F.)
-		ENDIF
-		LOCATE FOR RTRIM( s_Type ) == HOOK_AFTER_UPDATE AND LOWER( s_Path ) == cPath.s_Path
-		IF !FOUND()
-			lAnyChg = .T.
-			INSERT INTO cHook  (s_Type, s_Path, s_Cmd, l_Wait, l_Show) ;
-						VALUES (HOOK_AFTER_UPDATE, cPath.s_Path, sAppFName + " decode", .T., .F.)
-		ENDIF
-	ENDSCAN
-	IF this.l_PurgeExtinct
-		SELECT cHook
-		SCAN FOR ADDBS( LOWER( RTRIM( s_Path ) ) ) == ADDBS( LOWER( this.s_RootPath ) )
-			SELECT cPath
-			LOCATE FOR LOWER( s_Path ) == LOWER( cHook.s_Path )
-			IF !FOUND()
-				lAnyChg = .T.
-				DELETE IN cHook
-			ENDIF
-		ENDSCAN
-	ENDIF
-	IF lAnyChg
-		SELECT cHook
-		INDEX ON PADR( RTRIM( s_Type ) + " " + s_Path, MAX_VFP_IDX_LEN ) TAG s_Type COLLATE "general"
-		SET ORDER TO s_Type
-		s = ""
-		SCAN FOR !DELETED('cHook')
-			s = s + RTRIM( s_Type ) + LF + RTRIM( s_Path ) ;
-			  + LF + RTRIM( s_Cmd ) + LF + IIF( l_Wait, WAIT_YES, WAIT_NO ) ;
-			  + LF + IIF( l_Show, SHOW_YES, SHOW_NO ) + LF
-		ENDSCAN
-		WriteRegistry( HKEY_CURRENT_USER, "Software\TortoiseSVN", "hooks", s )
-	ENDIF
-	USE IN cHook
-	USE IN cPath
-ENDFUNC && InstallHooks
 *******************************************************************************
 ENDDEFINE && SubFoxTortoiseTools

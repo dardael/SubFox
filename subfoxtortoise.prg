@@ -35,7 +35,11 @@ IF USED( 'cFile' )
 ENDIF
 
 If Reccount("Errors") > 0
-	Do form Subfox_Errors
+	*-- Show errors in a simple message instead of form
+	LOCAL sErrorMsg, nErrorCount
+	nErrorCount = Reccount("Errors")
+	sErrorMsg = "SubFox completed with " + TRANSFORM(nErrorCount) + " error(s). Check error log for details."
+	MESSAGEBOX(sErrorMsg, 48, "SubFox - Encode/Decode")
 EndIf
 Use in Errors
 RELEASE oUtil
