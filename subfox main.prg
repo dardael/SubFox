@@ -1,17 +1,11 @@
 *-- SubFox Main --*
 *-- Mainline entry point program for SubFox.APP or .EXE
-
-#define APP_CLASS	"SubFox_Application"
-#define APP_LIB		"SubFox Application Class.prg"
+*-- Simplified version supporting only Encode and Decode operations
 
 LPARAMETERS sOption, p1,p2,p3,p4,p5,p6,p7,p8,p9
 
-sOption = PROPER( ALLTRIM( EVL( sOption, "Install" ) ) )
+sOption = PROPER( ALLTRIM( EVL( sOption, "Encode" ) ) )
 DO CASE
-CASE sOption == "Tortoise"
-	LOCAL o
-	o = NEWOBJECT( "SubFoxTortoiseTools", "SubFox Tortoise.prg" )
-	o.InstallHooks()
 CASE sOption == "Encode" && Tortoise command
 	LOCAL o
 	o = NEWOBJECT( "SubFoxTortoiseTools", "SubFox Tortoise.prg" )
@@ -20,25 +14,16 @@ CASE sOption == "Decode" && Tortoise command
 	LOCAL o
 	o = NEWOBJECT( "SubFoxTortoiseTools", "SubFox Tortoise.prg" )
 	o.Decode( p1 )
-CASE sOption == "Setup"
-	DO FORM SubFox_Includes
-CASE sOption == "Translate"
-	DO FORM SubFox_Translator
-CASE sOption == "Help"
-	LOCAL oApp
-	oApp = NEWOBJECT( APP_CLASS, APP_LIB )
-	oApp.ShowHelp()
-CASE sOption == "Download"
-	DO FORM SubFox_Download
-CASE sOption == "Resolve"
-	DO FORM SubFox_ConflictEditor
-CASE sOption == "Upload"
-	DO FORM SubFox_Upload
-OTHERWISE && CASE sOption == "Install"
-	LOCAL oApp, oTB
-	oApp = NEWOBJECT( APP_CLASS, APP_LIB )
-	oApp.CreateMenu()
-	IF oApp.UseToolbar
-		oTB = oApp.Toolbar && NEWOBJECT( "sfToolbar", "SubFox.vcx" )
-	ENDIF
+OTHERWISE
+	*-- Invalid option - show usage
+	LOCAL sMsg
+	TEXT TO sMsg NOSHOW
+	SubFox Usage:
+	
+	  SubFox Encode <file_list>  - Encode VFP files to text format
+	  SubFox Decode <file_list>  - Decode text files back to VFP format
+	
+	Where <file_list> is a file containing paths to files to process.
+	ENDTEXT
+	MESSAGEBOX(sMsg, 64, "SubFox - Encode/Decode Only")
 ENDCASE
